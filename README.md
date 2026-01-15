@@ -20,7 +20,7 @@
 
 ## Features
 
-### 🔍 Multiple Discovery Methods
+### Multiple Discovery Methods
 - **Certificate Transparency Logs** - Query CT logs for historical SSL certificates
 - **DNS Brute-Force** - Multi-threaded subdomain discovery with wordlists
 - **Web Source Aggregation** - Collect data from public APIs and sources
