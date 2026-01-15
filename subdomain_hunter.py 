@@ -1,0 +1,726 @@
+#!/usr/bin/env python3
+"""
+SubdomainHunter - Advanced Subdomain Enumeration Tool
+Developer: Anveeksh
+Website: https://www.anveekshmrao.com
+Description: A fast, multi-threaded subdomain discovery tool
+"""
+
+import dns.resolver
+import requests
+import concurrent.futures
+import argparse
+import json
+import re
+import time
+import sys
+import os
+from urllib.parse import urlparse
+from typing import Set, Dict
+from collections import defaultdict
+from datetime import datetime
+
+# Color codes for terminal output
+class Colors:
+    HEADER = '\033[95m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    END = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def print_banner():
+    """Display tool banner"""
+    banner = """
+   _____ _   _ ____  ____   ___  __  __    _    ___ _   _ 
+  / ____| | | | __ )|  _ \ / _ \|  \/  |  / \  |_ _| \ | |
+  \___ \| | | |  _ \| | | | | | | |\/| | / _ \  | ||  \| |
+   ___) | |_| | |_) | |_| | |_| | |  | |/ ___ \ | || |\  |
+  |____/ \___/|____/|____/ \___/|_|  |_/_/   \_\___|_| \_|
+                                                            
+    """
+    print(f"{Colors.CYAN}{Colors.BOLD}{banner}{Colors.END}")
+    print(f"    {Colors.BOLD}HUNTER v1.0 - Advanced Subdomain Enumeration Tool{Colors.END}")
+    print(f"{Colors.YELLOW}    Developer: Anveeksh | https://www.anveekshmrao.com{Colors.END}")
+    print(f"{Colors.GREEN}    For Security Researchers & Bug Bounty Hunters{Colors.END}")
+    print(f"{Colors.BLUE}    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━{Colors.END}\n")
+
+def print_menu():
+    """Display interactive menu"""
+    print(f"\n{Colors.BOLD}{Colors.CYAN}╔════════════════════════════════════════════════════════╗{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}║              SUBDOMAIN HUNTER - MAIN MENU              ║{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}╚════════════════════════════════════════════════════════╝{Colors.END}\n")
+    
+    print(f"{Colors.GREEN}[1]{Colors.END} Quick Scan (Passive Only - Fast)")
+    print(f"{Colors.GREEN}[2]{Colors.END} Standard Scan (Passive + Basic Brute-Force)")
+    print(f"{Colors.GREEN}[3]{Colors.END} Aggressive Scan (All Methods + Custom Wordlist)")
+    print(f"{Colors.GREEN}[4]{Colors.END} Custom Scan (Choose Your Options)")
+    print(f"{Colors.GREEN}[5]{Colors.END} View Previous Results")
+    print(f"{Colors.GREEN}[6]{Colors.END} Help & Documentation")
+    print(f"{Colors.GREEN}[7]{Colors.END} About & Credits")
+    print(f"{Colors.RED}[0]{Colors.END} Exit")
+    print()
+
+class SubdomainHunter:
+    def __init__(self, domain: str, threads: int = 50, timeout: int = 5, verbose: bool = False):
+        self.domain = domain
+        self.threads = threads
+        self.timeout = timeout
+        self.verbose = verbose
+        self.subdomains: Set[str] = set()
+        self.resolver = dns.resolver.Resolver()
+        self.resolver.timeout = timeout
+        self.resolver.lifetime = timeout
+        
+        # Use reliable DNS servers
+        self.resolver.nameservers = ['8.8.8.8', '1.1.1.1', '8.8.4.4']
+        
+        self.start_time = time.time()
+    
+    def log(self, message: str, level: str = "info"):
+        """Print colored log messages"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        if level == "info":
+            print(f"{Colors.BLUE}[{timestamp}] [*]{Colors.END} {message}")
+        elif level == "success":
+            print(f"{Colors.GREEN}[{timestamp}] [+]{Colors.END} {message}")
+        elif level == "error":
+            print(f"{Colors.RED}[{timestamp}] [-]{Colors.END} {message}")
+        elif level == "warning":
+            print(f"{Colors.YELLOW}[{timestamp}] [!]{Colors.END} {message}")
+        elif level == "found":
+            print(f"{Colors.CYAN}[{timestamp}] [FOUND]{Colors.END} {Colors.GREEN}{message}{Colors.END}")
+    
+    def run_all(self, wordlist_path: str = None, enable_ct: bool = True, 
+                enable_brute: bool = True, enable_web: bool = True,
+                enable_zone: bool = True) -> Dict:
+        """Run all enumeration techniques"""
+        self.log(f"Starting subdomain enumeration for: {Colors.BOLD}{self.domain}{Colors.END}", "info")
+        print()
+        
+        results = {
+            'domain': self.domain,
+            'subdomains': [],
+            'statistics': defaultdict(int),
+            'scan_time': 0
+        }
+        
+        # Certificate Transparency Logs
+        if enable_ct:
+            self.log("Phase 1: Certificate Transparency Logs", "info")
+            ct_subs = self.search_ct_logs()
+            results['statistics']['ct_logs'] = len(ct_subs)
+            self.log(f"Found {Colors.BOLD}{len(ct_subs)}{Colors.END} subdomains from CT logs", "success")
+            print()
+        
+        # Web Sources
+        if enable_web:
+            self.log("Phase 2: Web Sources & APIs", "info")
+            web_subs = self.web_search()
+            results['statistics']['web_search'] = len(web_subs)
+            self.log(f"Found {Colors.BOLD}{len(web_subs)}{Colors.END} subdomains from web sources", "success")
+            print()
+        
+        # DNS Zone Transfer
+        if enable_zone:
+            self.log("Phase 3: DNS Zone Transfer", "info")
+            zt_subs = self.zone_transfer()
+            results['statistics']['zone_transfer'] = len(zt_subs)
+            if zt_subs:
+                self.log(f"Found {Colors.BOLD}{len(zt_subs)}{Colors.END} subdomains from zone transfer", "success")
+            else:
+                self.log("Zone transfer not allowed (expected)", "warning")
+            print()
+        
+        # DNS Brute Force (Last because it's time-consuming)
+        if enable_brute and wordlist_path:
+            self.log("Phase 4: DNS Brute-Force Attack", "info")
+            brute_subs = self.dns_bruteforce(wordlist_path)
+            results['statistics']['brute_force'] = len(brute_subs)
+            self.log(f"Found {Colors.BOLD}{len(brute_subs)}{Colors.END} subdomains from brute-force", "success")
+            print()
+        
+        # Calculate scan time
+        results['scan_time'] = round(time.time() - self.start_time, 2)
+        
+        # Compile unique results
+        all_subs = sorted(list(self.subdomains))
+        results['subdomains'] = all_subs
+        results['statistics']['total_unique'] = len(all_subs)
+        
+        return results
+    
+    def search_ct_logs(self) -> Set[str]:
+        """Search Certificate Transparency logs"""
+        found = set()
+        
+        # crt.sh - Primary source
+        try:
+            url = f"https://crt.sh/?q=%.{self.domain}&output=json"
+            response = requests.get(url, timeout=self.timeout * 2)
+            
+            if response.status_code == 200:
+                data = response.json()
+                for entry in data:
+                    name = entry.get('name_value', '')
+                    for subdomain in name.split('\n'):
+                        subdomain = subdomain.strip().lower()
+                        if subdomain.endswith(self.domain) and '*' not in subdomain:
+                            if subdomain not in self.subdomains:
+                                found.add(subdomain)
+                                self.subdomains.add(subdomain)
+                                if self.verbose:
+                                    self.log(subdomain, "found")
+        except Exception as e:
+            self.log(f"crt.sh query failed: {str(e)}", "error")
+        
+        return found
+    
+    def dns_bruteforce(self, wordlist_path: str) -> Set[str]:
+        """Brute-force subdomains using wordlist"""
+        found = set()
+        
+        try:
+            with open(wordlist_path, 'r', encoding='utf-8', errors='ignore') as f:
+                words = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        except FileNotFoundError:
+            self.log(f"Wordlist not found: {wordlist_path}", "error")
+            return found
+        
+        self.log(f"Loaded {len(words)} entries from wordlist", "info")
+        
+        def check_subdomain(word):
+            subdomain = f"{word}.{self.domain}"
+            if self.resolve_dns(subdomain):
+                return subdomain
+            return None
+        
+        # Progress tracking
+        checked = 0
+        total = len(words)
+        
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.threads) as executor:
+            futures = {executor.submit(check_subdomain, word): word for word in words}
+            
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                checked += 1
+                
+                if result:
+                    found.add(result)
+                    self.subdomains.add(result)
+                    self.log(result, "found")
+                
+                # Progress bar
+                if checked % 50 == 0 or checked == total:
+                    progress = (checked / total) * 100
+                    bar_length = 40
+                    filled = int(bar_length * checked / total)
+                    bar = '█' * filled + '░' * (bar_length - filled)
+                    print(f"\r{Colors.YELLOW}[*] Progress: [{bar}] {progress:.1f}% ({checked}/{total}){Colors.END}", end='', flush=True)
+        
+        print()  # New line after progress bar
+        return found
+    
+    def resolve_dns(self, hostname: str) -> bool:
+        """Check if hostname resolves"""
+        try:
+            self.resolver.resolve(hostname, 'A')
+            return True
+        except:
+            return False
+    
+    def web_search(self) -> Set[str]:
+        """Search for subdomains via web sources"""
+        found = set()
+        
+        sources = {
+            'HackerTarget': f"https://api.hackertarget.com/hostsearch/?q={self.domain}",
+            'BufferOver': f"https://dns.bufferover.run/dns?q=.{self.domain}",
+        }
+        
+        for source_name, url in sources.items():
+            try:
+                response = requests.get(url, timeout=self.timeout * 2)
+                if response.status_code == 200:
+                    # Extract subdomains
+                    pattern = r'([a-zA-Z0-9][-a-zA-Z0-9]*\.)+' + re.escape(self.domain)
+                    matches = re.findall(pattern, response.text)
+                    
+                    source_count = 0
+                    for match in matches:
+                        subdomain = match.lower().rstrip('.')
+                        if subdomain.endswith(self.domain) and subdomain not in self.subdomains:
+                            found.add(subdomain)
+                            self.subdomains.add(subdomain)
+                            source_count += 1
+                            if self.verbose:
+                                self.log(subdomain, "found")
+                    
+                    if source_count > 0:
+                        self.log(f"{source_name}: {source_count} subdomains", "info")
+                        
+            except Exception as e:
+                if self.verbose:
+                    self.log(f"{source_name} failed: {str(e)}", "error")
+        
+        return found
+    
+    def zone_transfer(self) -> Set[str]:
+        """Attempt DNS zone transfer (AXFR)"""
+        found = set()
+        
+        try:
+            import dns.zone
+            import dns.query
+            
+            ns_records = self.resolver.resolve(self.domain, 'NS')
+            
+            for ns in ns_records:
+                ns_server = str(ns).rstrip('.')
+                try:
+                    zone = dns.zone.from_xfr(
+                        dns.query.xfr(ns_server, self.domain, timeout=self.timeout)
+                    )
+                    for name in zone.nodes.keys():
+                        subdomain = f"{name}.{self.domain}".lower()
+                        found.add(subdomain)
+                        self.subdomains.add(subdomain)
+                        if self.verbose:
+                            self.log(subdomain, "found")
+                except:
+                    continue
+        except:
+            pass
+        
+        return found
+    
+    def export_results(self, results: Dict, output_format: str = 'txt', output_file: str = None):
+        """Export results to file"""
+        if not output_file:
+            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            output_file = f"subdomains_{self.domain}_{timestamp}"
+        
+        if output_format == 'json':
+            filename = f"{output_file}.json"
+            with open(filename, 'w') as f:
+                json.dump(results, f, indent=2)
+        elif output_format == 'txt':
+            filename = f"{output_file}.txt"
+            with open(filename, 'w') as f:
+                for subdomain in results['subdomains']:
+                    f.write(f"{subdomain}\n")
+        
+        self.log(f"Results saved to: {Colors.BOLD}{filename}{Colors.END}", "success")
+        return filename
+
+
+def print_summary(results: Dict):
+    """Print scan summary"""
+    print()
+    print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}                       SCAN SUMMARY{Colors.END}")
+    print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+    print()
+    print(f"{Colors.BOLD}Target Domain:{Colors.END} {results['domain']}")
+    print(f"{Colors.BOLD}Scan Duration:{Colors.END} {results['scan_time']} seconds")
+    print(f"{Colors.BOLD}Total Subdomains:{Colors.END} {Colors.GREEN}{Colors.BOLD}{results['statistics']['total_unique']}{Colors.END}")
+    print()
+    print(f"{Colors.BOLD}Discovery Breakdown:{Colors.END}")
+    
+    methods = {
+        'ct_logs': 'Certificate Transparency',
+        'web_search': 'Web Sources',
+        'zone_transfer': 'Zone Transfer',
+        'brute_force': 'DNS Brute-Force'
+    }
+    
+    for key, name in methods.items():
+        count = results['statistics'].get(key, 0)
+        if count > 0:
+            print(f"  • {name:.<30} {Colors.GREEN}{count}{Colors.END}")
+    
+    print()
+    print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+
+
+def interactive_mode():
+    """Interactive menu-driven mode"""
+    print_banner()
+    
+    while True:
+        print_menu()
+        choice = input(f"{Colors.CYAN}Enter your choice [0-7]: {Colors.END}").strip()
+        
+        if choice == '0':
+            print(f"\n{Colors.YELLOW}Thanks for using SubdomainHunter!{Colors.END}")
+            print(f"{Colors.YELLOW}Visit: https://www.anveekshmrao.com{Colors.END}\n")
+            sys.exit(0)
+        
+        elif choice == '1':
+            # Quick Scan
+            domain = input(f"\n{Colors.GREEN}Enter target domain: {Colors.END}").strip()
+            if not domain:
+                print(f"{Colors.RED}Invalid domain!{Colors.END}")
+                continue
+            domain = urlparse(f"http://{domain}").netloc or domain
+            
+            hunter = SubdomainHunter(domain=domain, threads=50, timeout=5, verbose=False)
+            results = hunter.run_all(enable_brute=False, enable_zone=False)
+            print_summary(results)
+            
+            if results['subdomains']:
+                print(f"\n{Colors.BOLD}Discovered Subdomains:{Colors.END}")
+                print(f"{Colors.CYAN}{'─'*70}{Colors.END}")
+                for subdomain in results['subdomains']:
+                    print(f"  {Colors.GREEN}•{Colors.END} {subdomain}")
+            
+            save = input(f"\n{Colors.CYAN}Save results? (y/n): {Colors.END}").strip().lower()
+            if save == 'y':
+                fmt = input(f"{Colors.CYAN}Format (txt/json): {Colors.END}").strip().lower() or 'txt'
+                hunter.export_results(results, output_format=fmt)
+            
+            input(f"\n{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '2':
+            # Standard Scan
+            domain = input(f"\n{Colors.GREEN}Enter target domain: {Colors.END}").strip()
+            if not domain:
+                print(f"{Colors.RED}Invalid domain!{Colors.END}")
+                continue
+            domain = urlparse(f"http://{domain}").netloc or domain
+            
+            wordlist = 'wordlists/common.txt'
+            if not os.path.exists(wordlist):
+                print(f"{Colors.RED}Wordlist not found at {wordlist}{Colors.END}")
+                print(f"{Colors.YELLOW}Running passive scan only...{Colors.END}")
+                hunter = SubdomainHunter(domain=domain, threads=50, timeout=5, verbose=False)
+                results = hunter.run_all(enable_brute=False)
+            else:
+                hunter = SubdomainHunter(domain=domain, threads=50, timeout=5, verbose=False)
+                results = hunter.run_all(wordlist_path=wordlist)
+            
+            print_summary(results)
+            
+            if results['subdomains']:
+                print(f"\n{Colors.BOLD}Discovered Subdomains:{Colors.END}")
+                print(f"{Colors.CYAN}{'─'*70}{Colors.END}")
+                for subdomain in results['subdomains']:
+                    print(f"  {Colors.GREEN}•{Colors.END} {subdomain}")
+            
+            save = input(f"\n{Colors.CYAN}Save results? (y/n): {Colors.END}").strip().lower()
+            if save == 'y':
+                fmt = input(f"{Colors.CYAN}Format (txt/json): {Colors.END}").strip().lower() or 'txt'
+                hunter.export_results(results, output_format=fmt)
+            
+            input(f"\n{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '3':
+            # Aggressive Scan
+            domain = input(f"\n{Colors.GREEN}Enter target domain: {Colors.END}").strip()
+            if not domain:
+                print(f"{Colors.RED}Invalid domain!{Colors.END}")
+                continue
+            domain = urlparse(f"http://{domain}").netloc or domain
+            
+            wordlist = input(f"{Colors.GREEN}Enter wordlist path (or press Enter for default): {Colors.END}").strip()
+            if not wordlist:
+                wordlist = 'wordlists/common.txt'
+            
+            if not os.path.exists(wordlist):
+                print(f"{Colors.RED}Wordlist not found: {wordlist}{Colors.END}")
+                input(f"{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+                continue
+            
+            threads = input(f"{Colors.GREEN}Number of threads (default 100): {Colors.END}").strip()
+            threads = int(threads) if threads.isdigit() else 100
+            
+            hunter = SubdomainHunter(domain=domain, threads=threads, timeout=5, verbose=True)
+            results = hunter.run_all(wordlist_path=wordlist)
+            print_summary(results)
+            
+            if results['subdomains']:
+                print(f"\n{Colors.BOLD}Discovered Subdomains:{Colors.END}")
+                print(f"{Colors.CYAN}{'─'*70}{Colors.END}")
+                for subdomain in results['subdomains']:
+                    print(f"  {Colors.GREEN}•{Colors.END} {subdomain}")
+            
+            save = input(f"\n{Colors.CYAN}Save results? (y/n): {Colors.END}").strip().lower()
+            if save == 'y':
+                fmt = input(f"{Colors.CYAN}Format (txt/json): {Colors.END}").strip().lower() or 'txt'
+                hunter.export_results(results, output_format=fmt)
+            
+            input(f"\n{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '4':
+            # Custom Scan
+            domain = input(f"\n{Colors.GREEN}Enter target domain: {Colors.END}").strip()
+            if not domain:
+                print(f"{Colors.RED}Invalid domain!{Colors.END}")
+                continue
+            domain = urlparse(f"http://{domain}").netloc or domain
+            
+            print(f"\n{Colors.CYAN}Select enumeration methods:{Colors.END}")
+            enable_ct = input(f"  Certificate Transparency? (Y/n): ").strip().lower() != 'n'
+            enable_web = input(f"  Web Sources? (Y/n): ").strip().lower() != 'n'
+            enable_zone = input(f"  Zone Transfer? (Y/n): ").strip().lower() != 'n'
+            enable_brute = input(f"  DNS Brute-Force? (Y/n): ").strip().lower() != 'n'
+            
+            wordlist = None
+            if enable_brute:
+                wordlist = input(f"  Wordlist path (default: wordlists/common.txt): ").strip()
+                wordlist = wordlist or 'wordlists/common.txt'
+                if not os.path.exists(wordlist):
+                    print(f"{Colors.RED}Wordlist not found: {wordlist}{Colors.END}")
+                    enable_brute = False
+            
+            threads = input(f"\n{Colors.GREEN}Number of threads (default 50): {Colors.END}").strip()
+            threads = int(threads) if threads.isdigit() else 50
+            
+            verbose = input(f"{Colors.GREEN}Verbose output? (y/N): {Colors.END}").strip().lower() == 'y'
+            
+            hunter = SubdomainHunter(domain=domain, threads=threads, timeout=5, verbose=verbose)
+            results = hunter.run_all(
+                wordlist_path=wordlist,
+                enable_ct=enable_ct,
+                enable_web=enable_web,
+                enable_zone=enable_zone,
+                enable_brute=enable_brute
+            )
+            print_summary(results)
+            
+            if results['subdomains']:
+                print(f"\n{Colors.BOLD}Discovered Subdomains:{Colors.END}")
+                print(f"{Colors.CYAN}{'─'*70}{Colors.END}")
+                for subdomain in results['subdomains']:
+                    print(f"  {Colors.GREEN}•{Colors.END} {subdomain}")
+            
+            save = input(f"\n{Colors.CYAN}Save results? (y/n): {Colors.END}").strip().lower()
+            if save == 'y':
+                fmt = input(f"{Colors.CYAN}Format (txt/json): {Colors.END}").strip().lower() or 'txt'
+                hunter.export_results(results, output_format=fmt)
+            
+            input(f"\n{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '5':
+            # View Previous Results
+            print(f"\n{Colors.CYAN}Scanning for result files...{Colors.END}\n")
+            files = [f for f in os.listdir('.') if f.startswith('subdomains_') and (f.endswith('.txt') or f.endswith('.json'))]
+            
+            if files:
+                print(f"{Colors.BOLD}Found {len(files)} result file(s):{Colors.END}\n")
+                for i, f in enumerate(files[:10], 1):
+                    print(f"  {Colors.GREEN}[{i}]{Colors.END} {f}")
+                if len(files) > 10:
+                    print(f"\n  {Colors.YELLOW}...and {len(files) - 10} more{Colors.END}")
+            else:
+                print(f"{Colors.YELLOW}No previous results found{Colors.END}")
+            
+            input(f"\n{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '6':
+            # Help
+            print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+            print(f"{Colors.BOLD}{Colors.CYAN}                    HELP & DOCUMENTATION{Colors.END}")
+            print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}\n")
+            
+            print(f"{Colors.BOLD}Scan Types:{Colors.END}")
+            print(f"  • {Colors.GREEN}Quick Scan:{Colors.END} Fast passive enumeration (CT logs + Web)")
+            print(f"  • {Colors.GREEN}Standard Scan:{Colors.END} Passive + basic brute-force")
+            print(f"  • {Colors.GREEN}Aggressive Scan:{Colors.END} All methods with custom wordlist")
+            print(f"  • {Colors.GREEN}Custom Scan:{Colors.END} Choose your own options\n")
+            
+            print(f"{Colors.BOLD}Command-Line Usage:{Colors.END}")
+            print(f"  python subdomain_hunter.py -d example.com")
+            print(f"  python subdomain_hunter.py -d example.com -w big_wordlist.txt -t 100")
+            print(f"  python subdomain_hunter.py -d example.com --no-brute -o json\n")
+            
+            print(f"{Colors.BOLD}Recommended Wordlists:{Colors.END}")
+            print(f"  • SecLists (GitHub: danielmiessler/SecLists)")
+            print(f"  • Assetnote Wordlists")
+            print(f"  • jhaddix/all.txt\n")
+            
+            input(f"{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        elif choice == '7':
+            # About
+            print(f"\n{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}")
+            print(f"{Colors.BOLD}{Colors.CYAN}                    ABOUT SUBDOMAIN HUNTER{Colors.END}")
+            print(f"{Colors.BOLD}{Colors.CYAN}{'='*70}{Colors.END}\n")
+            
+            print(f"{Colors.BOLD}SubdomainHunter v1.0{Colors.END}")
+            print(f"Advanced subdomain enumeration tool\n")
+            
+            print(f"{Colors.BOLD}Developer:{Colors.END} Anveeksh")
+            print(f"{Colors.BOLD}Website:{Colors.END} {Colors.CYAN}https://www.anveekshmrao.com{Colors.END}")
+            print(f"{Colors.BOLD}GitHub:{Colors.END} https://github.com/yourusername/subdomain-hunter\n")
+            
+            print(f"{Colors.BOLD}Features:{Colors.END}")
+            print(f"  ✓ Certificate Transparency Logs")
+            print(f"  ✓ DNS Brute-Force Attack")
+            print(f"  ✓ Web Source Aggregation")
+            print(f"  ✓ DNS Zone Transfer Detection")
+            print(f"  ✓ Multi-threaded Scanning")
+            print(f"  ✓ Multiple Export Formats\n")
+            
+            print(f"{Colors.BOLD}License:{Colors.END} MIT")
+            print(f"{Colors.BOLD}Purpose:{Colors.END} Security Research & Bug Bounty Hunting\n")
+            
+            print(f"{Colors.YELLOW}⚠️  Use responsibly and only on domains you own or have permission to test{Colors.END}\n")
+            
+            input(f"{Colors.YELLOW}Press Enter to return to menu...{Colors.END}")
+        
+        else:
+            print(f"\n{Colors.RED}Invalid choice! Please select 0-7{Colors.END}")
+            time.sleep(1)
+
+
+def command_line_mode():
+    """Command-line argument mode"""
+    parser = argparse.ArgumentParser(
+        description='SubdomainHunter - Advanced Subdomain Enumeration Tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Developer: Anveeksh
+Website: https://www.anveekshmrao.com
+
+Examples:
+  Basic scan:
+    python subdomain_hunter.py -d example.com
+  
+  Scan with custom wordlist:
+    python subdomain_hunter.py -d example.com -w wordlists/big.txt
+  
+  Fast scan (more threads):
+    python subdomain_hunter.py -d example.com -t 100
+  
+  Only passive enumeration:
+    python subdomain_hunter.py -d example.com --no-brute
+  
+  Verbose with JSON export:
+    python subdomain_hunter.py -d example.com -v -o json
+        """
+    )
+    
+    parser.add_argument('-d', '--domain', 
+                       help='Target domain to enumerate')
+    parser.add_argument('-w', '--wordlist', 
+                       help='Path to wordlist file for brute-force')
+    parser.add_argument('-t', '--threads', type=int, default=50, 
+                       help='Number of threads (default: 50)')
+    parser.add_argument('--timeout', type=int, default=5, 
+                       help='DNS timeout in seconds (default: 5)')
+    parser.add_argument('-v', '--verbose', action='store_true', 
+                       help='Enable verbose output')
+    parser.add_argument('--no-ct', action='store_true', 
+                       help='Disable Certificate Transparency search')
+    parser.add_argument('--no-brute', action='store_true', 
+                       help='Disable DNS brute-force')
+    parser.add_argument('--no-web', action='store_true', 
+                       help='Disable web source search')
+    parser.add_argument('--no-zone', action='store_true', 
+                       help='Disable zone transfer attempt')
+    parser.add_argument('-o', '--output', choices=['txt', 'json'], default='txt', 
+                       help='Output format (default: txt)')
+    parser.add_argument('-f', '--file', 
+                       help='Output filename (without extension)')
+    
+    args = parser.parse_args()
+    
+    # If no domain provided, return False to trigger interactive mode
+    if not args.domain:
+        return False
+    
+    # Display banner
+    print_banner()
+    
+    # Clean domain
+    domain = urlparse(f"http://{args.domain}").netloc or args.domain
+    domain = domain.lower().strip()
+    
+    # Validate domain
+    if not re.match(r'^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$', domain):
+        print(f"{Colors.RED}[!] Invalid domain format: {domain}{Colors.END}")
+        sys.exit(1)
+    
+    # Handle wordlist
+    wordlist = args.wordlist
+    if not args.no_brute and not wordlist:
+        wordlist = 'wordlists/common.txt'
+        if not os.path.exists(wordlist):
+            print(f"{Colors.YELLOW}[!] No wordlist found. Using passive enumeration only.{Colors.END}\n")
+            args.no_brute = True
+    
+    # Initialize hunter
+    hunter = SubdomainHunter(
+        domain=domain,
+        threads=args.threads,
+        timeout=args.timeout,
+        verbose=args.verbose
+    )
+    
+    try:
+        # Run scan
+        results = hunter.run_all(
+            wordlist_path=wordlist,
+            enable_ct=not args.no_ct,
+            enable_brute=not args.no_brute,
+            enable_web=not args.no_web,
+            enable_zone=not args.no_zone
+        )
+        
+        # Print summary
+        print_summary(results)
+        
+        # Print discovered subdomains
+        if results['subdomains']:
+            print()
+            print(f"{Colors.BOLD}Discovered Subdomains:{Colors.END}")
+            print(f"{Colors.CYAN}{'─'*70}{Colors.END}")
+            for subdomain in results['subdomains']:
+                print(f"  {Colors.GREEN}•{Colors.END} {subdomain}")
+            print()
+        
+        # Export results
+        hunter.export_results(results, output_format=args.output, output_file=args.file)
+        
+        print()
+        print(f"{Colors.GREEN}{Colors.BOLD}[✓] Scan completed successfully!{Colors.END}")
+        
+    except KeyboardInterrupt:
+        print(f"\n{Colors.RED}[!] Scan interrupted by user{Colors.END}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"{Colors.RED}[!] Error: {str(e)}{Colors.END}")
+        sys.exit(1)
+    
+    return True
+
+
+def main():
+    """Main entry point"""
+    # Check if any arguments provided
+    if len(sys.argv) == 1:
+        # No arguments - start interactive mode
+        try:
+            interactive_mode()
+        except KeyboardInterrupt:
+            print(f"\n{Colors.YELLOW}Thanks for using SubdomainHunter!{Colors.END}")
+            sys.exit(0)
+    else:
+        # Arguments provided - use command-line mode
+        if not command_line_mode():
+            # If command_line_mode returns False (no domain), start interactive
+            try:
+                interactive_mode()
+            except KeyboardInterrupt:
+                print(f"\n{Colors.YELLOW}Thanks for using SubdomainHunter!{Colors.END}")
+                sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

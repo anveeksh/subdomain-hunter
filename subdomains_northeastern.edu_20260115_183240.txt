@@ -1,0 +1,11 @@
+api.northeastern.edu
+db.northeastern.edu
+jenkins.northeastern.edu
+localhost.northeastern.edu
+login.northeastern.edu
+news.northeastern.edu
+smtp.northeastern.edu
+test.northeastern.edu
+vpn.northeastern.edu
+web.northeastern.edu
+www.northeastern.edu
