@@ -1,4 +1,4 @@
-# 🎯 SubdomainHunter
+# SubdomainHunter
 
 <p align="center">
   <img src="https://img.shields.io/badge/python-3.7+-blue.svg" alt="Python">
@@ -18,7 +18,7 @@
 
 ---
 
-## ✨ Features
+## Features
 
 ### 🔍 Multiple Discovery Methods
 - **Certificate Transparency Logs** - Query CT logs for historical SSL certificates
@@ -26,20 +26,20 @@
 - **Web Source Aggregation** - Collect data from public APIs and sources
 - **DNS Zone Transfer** - Attempt AXFR zone transfers
 
-### ⚡ High Performance
+### High Performance
 - Multi-threaded concurrent scanning
 - Optimized DNS resolution
 - Progress bars and real-time feedback
 - Configurable thread count and timeouts
 
-### 🎨 Beautiful Interface
+### Beautiful Interface
 - **Interactive Menu Mode** - User-friendly menu system
 - **Command-Line Mode** - Full CLI support for automation
 - Colored terminal output
 - Real-time progress indicators
 - Detailed statistics and reporting
 
-### 💾 Flexible Export
+### Flexible Export
 - Export results as JSON or TXT
 - Timestamped output files
 - View previous scan results
@@ -47,7 +47,7 @@
 
 ---
 
-## 📋 Requirements
+## Requirements
 
 - **Python 3.7+**
 - **Internet connection**
@@ -55,7 +55,7 @@
 
 ---
 
-## 🚀 Installation
+## Installation
 
 ### Step 1: Clone the Repository
 ```bash
@@ -72,7 +72,7 @@ That's it! You're ready to go.
 
 ---
 
-## 📖 Usage
+## Usage
 
 ### Interactive Mode (Recommended for Beginners)
 
@@ -136,7 +136,7 @@ python subdomain_hunter.py -d example.com -f my_scan -o json
 
 ---
 
-## 🎯 Command-Line Options
+## Command-Line Options
 ```
 Required Arguments:
   -d, --domain          Target domain to enumerate
@@ -160,7 +160,7 @@ Output Options:
 
 ---
 
-## 📊 Example Output
+## Example Output
 ```
    _____ _   _ ____  ____   ___  __  __    _    ___ _   _ 
   / ____| | | | __ )|  _ \ / _ \|  \/  |  / \  |_ _| \ | |
@@ -222,7 +222,12 @@ Discovered Subdomains:
 
 ---
 
-## 🗂️ Recommended Wordlists
+## Screenshot output
+<img width="1102" height="700" alt="Screenshot 2026-01-15 at 6 50 06 PM" src="https://github.com/user-attachments/assets/6213f365-baad-482d-a719-92a4372f7f3b" />
+
+---
+
+## Recommended Wordlists
 
 For better results, use comprehensive wordlists:
 
@@ -244,15 +249,15 @@ python subdomain_hunter.py -d example.com -w SecLists/Discovery/DNS/subdomains-t
 
 ---
 
-## 🛡️ Ethical Usage
+## Ethical Usage
 
 This tool is designed for:
-- ✅ **Security research**
-- ✅ **Bug bounty hunting**
-- ✅ **Penetration testing** (with explicit permission)
-- ✅ **Educational purposes**
+- **Security research**
+- **Bug bounty hunting**
+- **Penetration testing** (with explicit permission)
+- **Educational purposes**
 
-### ⚠️ Important Legal Notice
+### Important Legal Notice
 
 **Only scan domains you own or have explicit written permission to test.**
 
@@ -265,7 +270,7 @@ Always obtain proper authorization before scanning any target.
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 ```
 subdomain-hunter/
 ├── subdomain_hunter.py      # Main tool file
@@ -279,7 +284,7 @@ subdomain-hunter/
 
 ---
 
-## 🔧 Advanced Configuration
+## Advanced Configuration
 
 ### Custom DNS Servers
 
@@ -306,7 +311,7 @@ python subdomain_hunter.py -d example.com --timeout 10
 
 ---
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Issue: "Module not found: dns"
 **Solution:**
@@ -335,7 +340,7 @@ python subdomain_hunter.py -d example.com -w /path/to/your/wordlist.txt
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Here's how you can help:
 
@@ -365,7 +370,7 @@ Contributions are welcome! Here's how you can help:
 
 ---
 
-## 📝 Changelog
+## Changelog
 
 ### Version 1.0 (January 2025)
 - Initial release
@@ -379,7 +384,7 @@ Contributions are welcome! Here's how you can help:
 
 ---
 
-## 📜 License
+## License
 
 This project is licensed under the **MIT License**.
 ```
@@ -404,7 +409,7 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - **crt.sh** - Certificate Transparency log database
 - **HackerTarget** - Free API for reconnaissance
@@ -414,11 +419,11 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
 ---
 
-## 📧 Contact & Support
+## Contact & Support
 
 - **Developer:** Anveeksh
 - **Website:** [https://www.anveekshmrao.com](https://www.anveekshmrao.com)
-- **GitHub:** [https://github.com/yourusername/subdomain-hunter](https://github.com/yourusername/subdomain-hunter)
+- **GitHub:** [https://github.com/anveeksh/subdomain-hunter](https://github.com/anveeksh/subdomain-hunter)
 
 ### Found a bug or have a suggestion?
 - Open an issue on GitHub
@@ -427,26 +432,26 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
 ---
 
-## 🌟 Show Your Support
+## Show Your Support
 
 If you find this tool helpful, please:
-- ⭐ Star the repository
-- 🐛 Report bugs
-- 💡 Suggest features
-- 🤝 Contribute code
-- 📢 Share with others
+- Star the repository
+- Report bugs
+- Suggest features
+- Contribute code
+- Share with others
 
 ---
 
 <p align="center">
-  <strong>Made with ❤️ for the cybersecurity community</strong><br>
-  Happy hunting! 🎯
+  <strong>Made with for the cybersecurity community</strong><br>
+  Happy hunting! 
 </p>
 ```
 
 ---
 
-## 📁 FILE 5: `.gitignore`
+## FILE 5: `.gitignore`
 ```
 # Python
 __pycache__/
@@ -493,7 +498,7 @@ Thumbs.db
 
 ---
 
-## 📁 FILE 6: `LICENSE`
+## FILE 6: `LICENSE`
 ```
 MIT License
 
